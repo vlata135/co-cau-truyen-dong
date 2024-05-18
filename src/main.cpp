@@ -39,11 +39,16 @@ void readEncoder_right();
 void readEncoder_left();
 void move_forward(int pwr, int channel, int in2);
 void move_backward(int pwr, int channel, int in2);
+String readUt();
 void print_pos(AsyncWebServerRequest *request)
 {
     request->send(200, "text/plain", String(encoder_right));
 }
-
+String readUt()
+{
+    // String ut = Serial1.readString();
+    return String(encoder_right);
+}
 
 void setup()
 {
@@ -66,7 +71,79 @@ void setup()
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/plain", "Hi! I am ESP32.");
     });
-    server.on("/velocity", print_pos);
+    server.on("/graph", HTTP_GET, [](AsyncWebServerRequest *request){
+        String index = R"rawliteral(
+            <!DOCTYPE HTML><html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+  <style>
+    body {
+      min-width: 310px;
+    	max-width: 800px;
+    	height: 400px;
+      margin: 0 auto;
+    }
+    h2 {
+      font-family: Arial;
+      font-size: 2.5rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h2>ESP32 Tuning PID</h2>
+  <div id="chart-temperature" class="container"></div>
+  
+</body>
+<script>
+var chartT = new Highcharts.Chart({
+  chart:{ renderTo : 'chart-temperature' },
+  title: { text: 'U(t)' },
+  series: [{
+    showInLegend: false,
+    data: []
+  }],
+  plotOptions: {
+    line: { animation: false,
+      dataLabels: { enabled: true }
+    },
+    series: { color: '#059e8a' }
+  },
+  xAxis: { type: 'datetime',
+    dateTimeLabelFormats: { second: '%H:%M:%S' }
+  },
+  yAxis: {
+    title: { text: 'Giá trị' }
+  },
+  credits: { enabled: false }
+});
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      var x = (new Date()).getTime(),
+          y = parseFloat(this.responseText);
+      //console.log(this.responseText);
+      if(chartT.series[0].data.length > 40) {
+        chartT.series[0].addPoint([x, y], true, true, true);
+      } else {
+        chartT.series[0].addPoint([x, y], true, false, true);
+      }
+    }
+  };
+  xhttp.open("GET", "/temperature", true);
+  xhttp.send();
+}, 500 ) ;
+</script>
+</html>
+)rawliteral";
+    request->send(200, "text/html", index);
+  });
+
+  server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", readUt().c_str());
+  });
 
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
     server.begin();
